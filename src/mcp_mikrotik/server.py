@@ -4,6 +4,7 @@ import sys
 from mcp_mikrotik import config
 from mcp_mikrotik.app import mcp
 from mcp_mikrotik.config import MikrotikConfig
+from mcp_mikrotik.devices import device_manager
 
 
 def main():
@@ -15,10 +16,15 @@ def main():
     logger = logging.getLogger(__name__)
 
     logger.info("Starting MCP MikroTik server")
-    logger.info(f"Using host: {config.mikrotik_config.host}")
-    logger.info(f"Using username: {config.mikrotik_config.username}")
-    if config.mikrotik_config.key_filename:
-        logger.info(f"Using key from: {config.mikrotik_config.key_filename}")
+    device_manager.load(config.mikrotik_config)
+    try:
+        active_name, active = device_manager.get_active()
+        logger.info(f"Active device: {active_name} ({active.host}:{active.port})")
+        logger.info(f"Using username: {active.username}")
+        if active.key_filename:
+            logger.info(f"Using key from: {active.key_filename}")
+    except Exception:
+        logger.warning("No devices configured; add one with the add_device tool")
 
     try:
         mcp.settings.host = config.mikrotik_config.mcp.host

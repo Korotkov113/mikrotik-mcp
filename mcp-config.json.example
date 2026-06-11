@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "mikrotik-mcp-server": {
+    "mikrotik-single-device": {
       "command": "${PATH_TO_PYTHON_EXECUTE_ABLE_FILE}:-python",
       "args": [
           "${PATH_TO_SERVER_PY}:-mikrotik-mcp/src/mcp_mikrotik/server.py",
@@ -8,6 +8,15 @@
           "--host", "${HOST}:-127.0.0.1",
           "--port", "${SSH_PORT}:-22",
           "--username", "${USERNAME}:-admin"
+      ],
+      "env": {}
+    },
+    "mikrotik-multi-device": {
+      "command": "${PATH_TO_PYTHON_EXECUTE_ABLE_FILE}:-python",
+      "args": [
+          "${PATH_TO_SERVER_PY}:-mikrotik-mcp/src/mcp_mikrotik/server.py",
+          "--devices-file", "${DEVICES_FILE}:-~/.config/mikrotik-mcp/devices.json",
+          "--default-device", "${DEFAULT_DEVICE}:-home"
       ],
       "env": {}
     }

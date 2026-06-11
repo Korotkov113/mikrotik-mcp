@@ -1,0 +1,19 @@
+{
+  "default_device": "home",
+  "devices": {
+    "home": {
+      "host": "192.168.88.1",
+      "username": "admin",
+      "password": "secret",
+      "port": 22,
+      "description": "home router"
+    },
+    "office": {
+      "host": "10.0.0.1",
+      "username": "admin",
+      "key_filename": "/path/to/ssh/key",
+      "port": 2222,
+      "description": "office edge router"
+    }
+  }
+}

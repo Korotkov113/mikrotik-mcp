@@ -8,6 +8,7 @@ MCP server for managing MikroTik RouterOS devices via AI assistants (Claude Desk
 
 ### New modules
 
+- **`devices.py` + `scope/devices.py`** — Multi-device support: the server is no longer tied to a single router. Keep a registry of devices and switch between them at runtime — see [Multi-device support](#multi-device-support)
 - **`scope/routing.py`** — Full BGP management (sessions, connections, templates, instances, advertisements, routing filters, routing tables)
 - **`scope/mangle.py`** — Firewall mangle rules (list, add, remove, enable/disable with full parameter support)
 
@@ -15,6 +16,11 @@ MCP server for managing MikroTik RouterOS devices via AI assistants (Claude Desk
 
 | Tool | Module | Description |
 |------|--------|-------------|
+| `list_devices` | `devices` | List all configured devices; the active one is marked with `*` |
+| `use_device` | `devices` | Switch the active device — all subsequent tools target it |
+| `add_device` | `devices` | Register a device at runtime (optionally persist to the devices file) |
+| `remove_device` | `devices` | Remove a device from the registry |
+| `test_device_connection` | `devices` | Test SSH connectivity, show identity/version (without switching) |
 | `run_command` | `system` | Execute **any** RouterOS CLI command (no dedicated tool needed) |
 | `list_bgp_sessions` | `routing` | List BGP sessions with status |
 | `list_bgp_connections` | `routing` | List BGP connection configurations |
@@ -41,7 +47,8 @@ MCP server for managing MikroTik RouterOS devices via AI assistants (Claude Desk
 
 ### Architecture changes
 
-- **`connector.py`** — Added SFTP read/write support (`sftp_read_file`, `sftp_write_file`) for file operations on the device
+- **`devices.py`** — Device registry with an "active device" concept; loads from a JSON devices file, `MIKROTIK_DEVICES` env/CLI JSON, and legacy `--host`/`--username` flags (registered as device `default`)
+- **`connector.py`** — All commands run against the active device from the registry; added SFTP read/write support (`sftp_read_file`, `sftp_write_file`) for file operations on the device
 - **`app.py`** — Added tool annotation constants (`READ`, `WRITE`, `WRITE_IDEMPOTENT`, `DESTRUCTIVE`, `DANGEROUS`) for MCP tool hints; added `/health` endpoint
 - **`mikrotik_ssh_client.py`** — Added `sftp_read()` and `sftp_write()` methods to the SSH client
 - All scope modules updated to use tool annotations
@@ -77,7 +84,7 @@ pip install -e .
 
 ## Configuration
 
-### Claude Desktop / Claude Code
+### Single device (Claude Desktop / Claude Code)
 
 Add to your MCP config (`claude_desktop_config.json` or `.claude/settings.json`):
 
@@ -107,6 +114,86 @@ export MIKROTIK_USERNAME=admin
 export MIKROTIK_PASSWORD=your_password
 export MIKROTIK_PORT=22
 ```
+
+## Multi-device support
+
+The server keeps a **device registry** and an **active device**. Every tool
+(firewall, DNS, routes, backups, ...) targets the active device; switch
+devices at any time with `use_device` — no server restart needed.
+
+The registry is built from three sources (later wins):
+
+1. **Devices file** — JSON file at `--devices-file` / `MIKROTIK_DEVICES_FILE`
+   (default: `~/.config/mikrotik-mcp/devices.json`)
+2. **`MIKROTIK_DEVICES`** env var (or `--devices`) with inline JSON
+3. **Legacy flags** `--host`/`--username`/`--password`/`--port`/`--key-filename`,
+   registered as device `default` (existing single-device setups keep working unchanged)
+
+### Devices file
+
+```json
+{
+  "default_device": "home",
+  "devices": {
+    "home": {
+      "host": "192.168.88.1",
+      "username": "admin",
+      "password": "secret",
+      "port": 22,
+      "description": "home router"
+    },
+    "office": {
+      "host": "10.0.0.1",
+      "username": "admin",
+      "key_filename": "/path/to/ssh/key",
+      "port": 2222,
+      "description": "office edge router"
+    }
+  }
+}
+```
+
+MCP config for the multi-device setup:
+
+```json
+{
+  "mcpServers": {
+    "mikrotik": {
+      "command": "/path/to/mikrotik-mcp/.venv/bin/mcp-server-mikrotik",
+      "args": ["--devices-file", "/path/to/devices.json"]
+    }
+  }
+}
+```
+
+### Inline JSON via environment
+
+```bash
+export MIKROTIK_DEVICES='{"home": {"host": "192.168.88.1", "username": "admin", "password": "secret"}, "office": {"host": "10.0.0.1", "username": "admin", "key_filename": "/path/to/key"}}'
+export MIKROTIK_DEFAULT_DEVICE=home
+```
+
+### Managing devices at runtime
+
+```
+> What routers do I have?
+Tool: list_devices()
+* home: admin@192.168.88.1:22 [password] — home router
+  office: admin@10.0.0.1:2222 [ssh-key] — office edge router
+
+> Switch to the office router
+Tool: use_device(name="office")
+
+> Add the lab router and remember it
+Tool: add_device(name="lab", host="172.16.0.1", username="admin", password="...", make_active=true, save=true)
+
+> Check if the office router is reachable
+Tool: test_device_connection(name="office")
+```
+
+`add_device(..., save=true)` persists the registry to the devices file
+(created with `0600` permissions, since it may contain passwords). Prefer
+`key_filename` over passwords where possible.
 
 ## Usage examples
 
